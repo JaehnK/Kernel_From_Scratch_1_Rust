@@ -1,6 +1,5 @@
-# KFS_1 — Grub, Boot and Screen
+# Grub, Boot and Screen
 
-> 42Seoul KFS_1 과제 구현 가이드  
 > Rust + QEMU + GRUB 기반 x86 커널 개발  
 > 환경: Ubuntu 24.04 (서버) / macOS M1 (클라이언트)
 
