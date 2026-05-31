@@ -1,0 +1,11 @@
+[unstable]
+build-std = ["core"]
+build-std-features = ["compiler-builtins-mem"]
+
+[build]
+target = "i386-kernel.json"
+
+[target.'cfg(target_arch = "x86")']
+rustflags = [
+    "-C", "embed-bitcode=no",
+]
