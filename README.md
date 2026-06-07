@@ -324,82 +324,58 @@ SECTIONS {
 
 ## 5. 빌드
 
-### 5.1 ASM 컴파일
+빌드는 `kernel/Makefile`이 담당한다.  
+Makefile은 ASM만 직접 오브젝트로 만들고, Rust 최종 링크는 Cargo와 `build.rs`에 맡긴다.
 
 ```bash
-as --32 src/boot.s -o src/boot.o
+make -C kernel build
 ```
 
-### 5.2 Rust 빌드 (오브젝트 파일 추출)
+내부 흐름:
 
-`--emit=obj`로 링크 전 오브젝트 파일을 추출한다.
-
-```bash
-RUSTFLAGS="--emit=obj" cargo +nightly build -Z build-std=core -Z json-target-spec --target i386-kernel.json
+```text
+src/boot.s
+ └→ src/boot.o
+     └→ cargo +nightly build --release -Zjson-target-spec
+         └→ target/i386-kernel/release/kernel
+             └→ kernel.bin
 ```
 
-빌드 후 오브젝트 파일 위치 확인:
+`build.rs`가 `src/boot.o`와 `src/linker.ld`를 링크 인자로 전달하므로, `ld`를 직접 호출하거나 Cargo 내부의 `.o`/`.rlib` 파일을 찾지 않는다.
+
+### 5.1 빌드 결과 검증
+
+Makefile은 `kernel.bin` 생성 후 multiboot 검증을 실행한다.
 
 ```bash
-find target/i386-kernel/debug -name "kernel*.o" | grep -v incremental
-# 예시: target/i386-kernel/debug/deps/kernel-95250ecc0641196f.o
+grub-file --is-x86-multiboot kernel/kernel.bin
 ```
 
-### 5.3 최종 링킹
+심볼 주소를 확인하려면:
 
 ```bash
-ld -m elf_i386 -T src/linker.ld -o kernel.bin \
-    src/boot.o \
-    target/i386-kernel/debug/deps/kernel-<HASH>.o \
-    target/i386-kernel/debug/deps/libcore-<HASH>.rlib \
-    target/i386-kernel/debug/deps/libcompiler_builtins-<HASH>.rlib
-```
-
-> `<HASH>` 부분은 빌드마다 달라지므로 `find` 명령으로 실제 파일명을 확인 후 사용한다.
-
-### 5.4 빌드 결과 검증
-
-multiboot 헤더가 파일 앞부분(오프셋 `0x1000`)에 있는지 확인한다.
-
-```bash
-# 매직 넘버 위치 확인 (0x2000 이내여야 GRUB이 인식)
-xxd kernel.bin | grep "02b0 ad1b"
-
-# 심볼 주소 확인
-nm kernel.bin | grep "_start\|kernel_main"
-# _start: 0x00100000, kernel_main: 0x001003xx 이어야 한다
+nm kernel/kernel.bin | grep "_start\|kernel_main"
 ```
 
 ---
 
 ## 6. 이미지에 커널 배포 및 GRUB 설정
 
-### 6.1 커널 바이너리 복사
+현재 `kfs.img`에는 이미 GRUB과 `/boot/grub/grub.cfg`가 들어 있다.  
+새 커널을 이미지에 반영할 때는 Makefile의 `install` 타겟으로 `/boot/kernel`만 교체한다.
 
 ```bash
-sudo losetup -fP ../kfs.img
-sudo losetup -a | grep kfs.img   # 루프 번호 확인
-sudo mount /dev/loop8p1 /tmp/kfs_mount
-sudo cp kernel.bin /tmp/kfs_mount/boot/kernel
+make -C kernel install
 ```
 
-### 6.2 `grub.cfg` 작성
+이미지 안의 GRUB 설정은 다음 경로를 부팅한다.
 
-```bash
-sudo bash -c 'cat > /tmp/kfs_mount/boot/grub/grub.cfg << EOF
+```cfg
 menuentry "kfs" {
     insmod multiboot
     multiboot /boot/kernel
     boot
 }
-EOF'
-```
-
-### 6.3 언마운트
-
-```bash
-sudo umount /tmp/kfs_mount
-sudo losetup -d /dev/loop8
 ```
 
 ---
@@ -423,7 +399,7 @@ echo $DISPLAY   # localhost:10.0 처럼 출력되어야 함
 SDL/GTK가 GLX 오류로 실패할 경우 `-display curses`를 사용한다.
 
 ```bash
-qemu-system-i386 -drive file=../kfs.img,format=raw -display curses
+make -C kernel run
 ```
 
 GRUB 메뉴에서 `kfs` 항목 선택 → 화면에 `42` 출력 확인.
@@ -437,18 +413,23 @@ GRUB 메뉴에서 `kfs` 항목 선택 → 화면에 `42` 출력 확인.
 
 ```
 kfs1/
+├── README.md
+├── .gitignore
 ├── kfs.img                  # 가상 디스크 이미지 (GRUB 설치됨)
 └── kernel/
     ├── Cargo.toml
+    ├── Cargo.lock
+    ├── Makefile             # 빌드, 이미지 설치, QEMU 실행
     ├── build.rs             # boot.o 링크 및 링커 스크립트 적용
     ├── i386-kernel.json     # 커스텀 타겟 정의
-    ├── kernel.bin           # 최종 커널 바이너리
+    ├── kernel.bin           # 생성 산출물: 최종 커널 바이너리
+    ├── .gitignore
     ├── .cargo/
     │   └── config.toml      # nightly 빌드 설정
     └── src/
         ├── main.rs          # 커널 메인 (VGA 출력)
         ├── boot.s           # ASM 부트 코드 (multiboot 헤더 + _start)
-        ├── boot.o           # 컴파일된 ASM
+        ├── boot.o           # 생성 산출물: 컴파일된 ASM
         └── linker.ld        # 링커 스크립트
 ```
 
@@ -458,14 +439,14 @@ kfs1/
 
 | 오류 | 원인 및 해결 |
 |------|-------------|
-| `gtk initialization failed` | SSH 환경에서 GTK 디스플레이 없음. `-nographic` 또는 `-display curses` 사용 |
+| `gtk initialization failed` | SSH 환경에서 GTK 디스플레이 없음. Makefile의 `run`은 `-display curses` 사용 |
 | `no multiboot header found` | multiboot 헤더가 파일 첫 8KB 밖에 위치. `linker.ld`에서 `KEEP(src/boot.o(.text))`로 boot.o 섹션을 맨 앞에 강제 배치 |
 | `ELF section header region is larger than the file size` | ELF 파일 손상. `/DISCARD/` 섹션에 `debug`/`note`/`comment` 추가하여 제거 |
-| `cannot use executable file as input to a link` | ld 링크 입력으로 실행파일 불가. `--emit=obj`로 `.o` 파일 추출 후 링크 |
+| `cannot use executable file as input to a link` | Cargo 결과물을 다시 `ld` 입력으로 넣은 경우. 현재 Makefile 정책에서는 직접 `ld`를 호출하지 않는다 |
 | `target-pointer-width: invalid type: string` | JSON 타겟 파일에서 `32`를 문자열이 아닌 숫자로 작성 |
 | `soft-float is incompatible with the ABI` | `features`에서 `+soft-float` 제거 |
 | `-Z flag only accepted on nightly` | `rustup override set nightly`로 nightly 채널 전환 |
-| `json-target-spec` 관련 오류 | `cargo +nightly build -Z build-std=core -Z json-target-spec --target i386-kernel.json` |
+| `json-target-spec` 관련 오류 | `make -C kernel build` 또는 `cargo +nightly build --release -Zjson-target-spec` 사용 |
 | `Is another process using the image` | 이전 QEMU 프로세스가 이미지 점유 중. `pkill qemu` 후 재실행 |
 | `losetup -a`에 동일 이미지 중복 | `sudo losetup -d /dev/loopN`으로 중복 해제 후 재연결 |
 

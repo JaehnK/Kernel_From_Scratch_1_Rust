@@ -1,8 +1,3 @@
-# ============================================================
-# KFS_1 Makefile
-# 위치: kernel/Makefile
-# ============================================================
-
 TARGET      := i386-kernel
 KERNEL_BIN  := kernel.bin
 BUILD_BIN   := target/$(TARGET)/release/kernel
