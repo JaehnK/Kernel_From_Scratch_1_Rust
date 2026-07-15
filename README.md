@@ -53,7 +53,31 @@ cargo --version
 GRUB은 VM 위에 올리는 게 아니라 **가상 디스크 이미지 파일(.img) 안에 설치**된다.  
 QEMU는 이 이미지 파일을 가상 하드디스크처럼 실행하는 도구다.
 
-### 2.1 빈 디스크 이미지 생성
+### 2.1 자동 초기화 스크립트
+
+`scripts/init-image.sh`는 빈 이미지 생성부터 GRUB 설정까지 한 번에 수행한다.
+
+```bash
+./scripts/init-image.sh kfs.img
+```
+
+이미 같은 이름의 이미지가 있으면 덮어쓰지 않고 중단한다. 기존 이미지를 다시 만들려면 직접 삭제한 뒤 실행한다.
+
+스크립트가 수행하는 작업:
+
+```text
+dd로 kfs.img 생성
+→ loop device 연결
+→ MBR 파티션 생성
+→ ext2 포맷
+→ GRUB 설치
+→ /boot/grub/grub.cfg 생성
+→ loop device 해제
+```
+
+아래 2.2~2.5는 같은 과정을 수동으로 수행하는 절차다.
+
+### 2.2 빈 디스크 이미지 생성
 
 ```bash
 dd if=/dev/zero of=kfs.img bs=1M count=10
@@ -69,7 +93,7 @@ dd if=/dev/zero of=kfs.img bs=1M count=10
 > `/dev/zero`와 `/dev/null`은 다르다.  
 > `/dev/null`은 읽으면 즉시 EOF이라 빈 파일을 만들 수 없다. 반드시 `/dev/zero`를 사용해야 한다.
 
-### 2.2 루프 디바이스 연결
+### 2.3 루프 디바이스 연결
 
 이미지 파일을 블록 디바이스처럼 다루기 위해 루프 디바이스에 연결한다.
 
@@ -83,7 +107,7 @@ sudo losetup -a | grep kfs.img   # 할당된 번호 확인 (예: /dev/loop8)
 > sudo losetup -d /dev/loopN   # 중복 해제 후 재연결
 > ```
 
-### 2.3 파티션 및 파일시스템 설정
+### 2.4 파티션 및 파일시스템 설정
 
 ```bash
 sudo parted /dev/loop8 mklabel msdos
@@ -99,7 +123,7 @@ sudo mkfs.ext2 /dev/loop8p1
 | `set 1 boot on` | boot 플래그 설정. BIOS가 부팅 파티션으로 인식 |
 | `mkfs.ext2` | ext2 파일시스템으로 포맷 |
 
-### 2.4 GRUB 설치
+### 2.5 GRUB 설치
 
 ```bash
 mkdir -p /tmp/kfs_mount
@@ -113,7 +137,7 @@ sudo losetup -d /dev/loop8
 - **MBR**: `/dev/loop8`의 첫 446바이트에 1단계 부트코드
 - **`/boot/grub/`**: GRUB 모듈 파일들
 
-### 2.5 부팅 확인
+### 2.6 부팅 확인
 
 ```bash
 qemu-system-i386 -drive file=kfs.img,format=raw -nographic
@@ -416,6 +440,8 @@ kfs1/
 ├── README.md
 ├── .gitignore
 ├── kfs.img                  # 가상 디스크 이미지 (GRUB 설치됨)
+├── scripts/
+│   └── init-image.sh        # kfs.img 초기 생성 및 GRUB 설치
 └── kernel/
     ├── Cargo.toml
     ├── Cargo.lock
