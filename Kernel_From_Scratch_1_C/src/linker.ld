@@ -1,39 +1,44 @@
+OUTPUT_FORMAT(elf32-i386)
 ENTRY(_start)
 
 SECTIONS {
     . = 1M;
+    _kernel_start = .;
 
-    .text :
+    .text ALIGN(4K) :
     {
-        KEEP(src/boot.o(.text))
+        KEEP(*(.multiboot))
         *(.text)
         *(.text.*)
     }
 
-    .rodata :
+    .rodata ALIGN(4K) :
     {
         *(.rodata)
         *(.rodata.*)
     }
 
-    .data :
+    .data ALIGN(4K) :
     {
         *(.data)
         *(.data.*)
     }
 
-    .bss :
+    .bss ALIGN(4K) :
     {
+        *(COMMON)
         *(.bss)
         *(.bss.*)
-        *(COMMON)
     }
+
+    _kernel_end = .;
 
     /DISCARD/ :
     {
         *(.eh_frame)
-        *(.debug_*)
+        *(.eh_frame_hdr)
         *(.note.*)
+        *(.note.GNU-stack)
         *(.comment)
     }
 }

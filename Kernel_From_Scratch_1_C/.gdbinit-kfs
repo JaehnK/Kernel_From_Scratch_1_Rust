@@ -1,0 +1,65 @@
+set confirm off
+set pagination off
+set disassemble-next-line on
+set print pretty on
+
+define kctx
+    printf "\n--- registers ---\n"
+    info registers eax ebx ecx edx esi edi ebp esp eip eflags
+    printf "\n--- code ---\n"
+    x/10i $pc
+    printf "\n--- stack ---\n"
+    x/12wx $esp
+    printf "\n--- vga text buffer ---\n"
+    x/4xb 0xb8000
+end
+
+document kctx
+Show a compact kernel debugging context: registers, code, stack, and VGA bytes.
+end
+
+define hook-stop
+    kctx
+end
+
+define boot
+    break _start
+    continue
+end
+
+document boot
+Break at _start and continue.
+end
+
+define main
+    break kernel_main
+    continue
+end
+
+document main
+Break at kernel_main and continue.
+end
+
+define vga
+    x/4xb 0xb8000
+end
+
+document vga
+Show the first two VGA text cells.
+end
+
+define code
+    x/16i $pc
+end
+
+document code
+Show instructions around the current program counter.
+end
+
+define stack
+    x/16wx $esp
+end
+
+document stack
+Show words at the current stack pointer.
+end

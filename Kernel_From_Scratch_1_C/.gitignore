@@ -1,0 +1,5 @@
+build/
+kernel.bin
+*.o
+*.elf
+*.bin
